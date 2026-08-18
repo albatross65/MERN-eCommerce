@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import compression from 'compression';
 import 'dotenv/config';
+import client from 'prom-client';
 
 import productRoutes from './routes/productRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -21,25 +22,55 @@ connectDB();
 
 const app = express();
 
+// -------------------------------------
+// PROMETHEUS METRICS
+// -------------------------------------
+
+// Collect default Node.js application metrics
+client.collectDefaultMetrics();
+
+// Expose metrics for Prometheus
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (error) {
+    res.status(500).end(error);
+  }
+});
+
+// -------------------------------------
+// MIDDLEWARE
+// -------------------------------------
+
 app.use(cors());
 app.use(compression());
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const __dirname = path.resolve(); // Set {__dirname} to current working directory
+const __dirname = path.resolve();
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// -------------------------------------
+// API ROUTES
+// -------------------------------------
 
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/upload', uploadRoutes);
 app.use('/api/v1/payment', paymentRoutes);
-//-------------------------------------
+
+// -------------------------------------
+// FRONTEND / ROOT ROUTE
+// -------------------------------------
+
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '/frontend/build')));
 
-  //any app route that is not api will redirected to index.html
+  // Any app route that is not an API will be redirected to index.html
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'frontend', 'build', 'index.html'));
   });
@@ -49,9 +80,16 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-//-------------------------------------
+// -------------------------------------
+// ERROR HANDLING
+// -------------------------------------
+
 app.use(notFound);
 app.use(errorHandler);
+
+// -------------------------------------
+// START SERVER
+// -------------------------------------
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}/`);
